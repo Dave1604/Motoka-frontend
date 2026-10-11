@@ -10,7 +10,6 @@ import {
 import toast from 'react-hot-toast';
 import config from '../../config/config';
 import AdminGuestOrders from './AdminGuestOrders';
-import useNewOrdersDot from '../../hooks/useNewOrdersDot';
 import {
   StatusBadge,
   PageLoader,
@@ -45,14 +44,6 @@ const STATUS_TONE = {
   cancelled:  'gray',
 };
 
-// The two order streams share this page: signed-in renewal orders and guest
-// checkout orders. `?tab=guest` selects the guest stream (same pattern as the
-// Ladipo `?tab=` pages); deep links to /admin/guest-orders redirect here.
-const ORDER_TABS = [
-  { value: 'orders', label: 'Orders' },
-  { value: 'guest',  label: 'Guest Orders' },
-];
-
 const AdminOrders = () => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -62,9 +53,8 @@ const AdminOrders = () => {
   const [totalPages, setTotalPages] = useState(1);
   const [totalOrders, setTotalOrders] = useState(0);
   const [perPage, setPerPage] = useState(15);
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const activeTab = searchParams.get('tab') === 'guest' ? 'guest' : 'orders';
-  const { signed: signedPending, guest: guestPending } = useNewOrdersDot();
 
   useEffect(() => {
     // The guest stream renders <AdminGuestOrders/>, which fetches for
@@ -149,6 +139,7 @@ const AdminOrders = () => {
     location: order.state_name ? `${order.state_name}${order.lga_name ? ', ' + order.lga_name : ''}` : (order.order_type === 'plate_number' || order.order_type === 'driver_license' ? '—' : 'Unknown'),
     renewalState: order.renewal_state || null,
     status: order.status,
+    date: order.created_at ? new Date(order.created_at).toLocaleDateString('en-GB') : '—',
     originalOrder: order
   }));
 
@@ -218,40 +209,6 @@ const AdminOrders = () => {
       {/* Hub provides the page header; keep only the count */}
       <div className="text-right text-sm text-gray-500">
         {totalOrders} total orders
-      </div>
-
-      {/* Orders / Guest orders switcher */}
-      <div className="flex gap-2" role="tablist" aria-label="Order type">
-        {ORDER_TABS.map((t) => {
-          const pending = t.value === 'guest' ? guestPending : signedPending;
-          const selected = activeTab === t.value;
-          return (
-            <button
-              key={t.value}
-              role="tab"
-              aria-selected={selected}
-              onClick={() => {
-                setCurrentPage(1);
-                setSearchTerm('');
-                if (t.value === 'guest') setSearchParams({ tab: 'guest' });
-                else setSearchParams({});
-              }}
-              className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-colors whitespace-nowrap ${
-                selected
-                  ? 'bg-[#2389E3] text-white'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              {t.label}
-              {pending > 0 && (
-                <span
-                  title={`${pending} new`}
-                  className={`h-2 w-2 rounded-full ${selected ? 'bg-white' : 'bg-[#2389E3]'}`}
-                />
-              )}
-            </button>
-          );
-        })}
       </div>
 
       {activeTab === 'guest' ? (
@@ -324,6 +281,7 @@ const AdminOrders = () => {
                 <th className={TH}>Location</th>
                 <th className={TH}>Renewal State</th>
                 <th className={TH}>Status</th>
+                <th className={TH}>Date</th>
                 <th className={TH}>Actions</th>
               </tr>
             </thead>
@@ -365,6 +323,9 @@ const AdminOrders = () => {
                       <StatusBadge tone={STATUS_TONE[order.status] || 'gray'}>
                         {STATUS_LABEL[order.status] || order.status}
                       </StatusBadge>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                      {order.date}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <button
