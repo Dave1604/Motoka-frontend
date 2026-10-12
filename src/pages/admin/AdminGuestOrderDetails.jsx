@@ -10,8 +10,64 @@ import {
   UserIcon,
 } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
-import { adminCreateShipment, adminGetGuestOrder } from '../../services/apiDelivery';
+import { adminCreateShipment, adminGetGuestOrder, adminRolloverGuestOrder } from '../../services/apiDelivery';
 import ShipmentTracker from '../../components/delivery/ShipmentTracker';
+
+function ScheduleHoldCard({ order, onChanged }) {
+  const [date, setDate] = useState(order.scheduled_for || '');
+  const [busy, setBusy] = useState(false);
+
+  const apply = async (next) => {
+    try {
+      setBusy(true);
+      await adminRolloverGuestOrder(order.id, next);
+      toast.success(next ? `Held to ${next}` : 'Released — actionable now');
+      await onChanged();
+    } catch (err) {
+      toast.error(err.message || 'Failed to update hold');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="bg-white shadow-sm border border-gray-100 rounded-xl p-6">
+      <h3 className="text-base font-semibold text-gray-900 mb-2">Schedule hold</h3>
+      <p className="text-sm text-gray-500">
+        {order.scheduled_for
+          ? `Held until ${order.scheduled_for} — ops is alerted when the window opens.`
+          : 'Actionable now.'}
+        {!order.linked_user_id && ' Guest has no account yet — processing waits for registration.'}
+      </p>
+      <div className="mt-3 flex flex-col sm:flex-row gap-2">
+        <input
+          type="date"
+          value={date}
+          onChange={(e) => setDate(e.target.value)}
+          className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+        />
+        <button
+          type="button"
+          disabled={busy || !date}
+          onClick={() => apply(date)}
+          className="rounded-lg bg-[#2389E3] px-4 py-2 text-sm font-semibold text-white hover:bg-[#2389E3]/90 disabled:opacity-50"
+        >
+          {busy ? 'Saving…' : 'Apply hold'}
+        </button>
+        {order.scheduled_for && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => apply(null)}
+            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+          >
+            Release now
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
 
 const STATUS_BADGE = {
   payment_success: 'bg-green-100 text-green-800',
@@ -190,10 +246,13 @@ export default function AdminGuestOrderDetails() {
         </div>
       </div>
 
+      {order.payment_status === 'payment_success' && (
+        <ScheduleHoldCard order={order} onChanged={load} />
+      )}
+
       {hasDelivery && (
         <div className="bg-white shadow rounded-lg p-6">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Delivery Information</h3>
-          <div className="space-y-4">
+          <h3 className="text-lg font-medium text-gray-900 mb-4">Delivery Information</h3>          <div className="space-y-4">
             <div className="flex items-start">
               <MapPinIcon className="h-5 w-5 text-gray-400 mr-3 mt-0.5" />
               <div>

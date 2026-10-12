@@ -105,6 +105,7 @@ const BADGE_TONES = {
   amber: 'bg-amber-100 text-amber-800',
   red: 'bg-red-100 text-red-800',
   blue: 'bg-[#2389E3]/10 text-[#2389E3]',
+  violet: 'bg-violet-100 text-violet-800',
   gray: 'bg-gray-100 text-gray-600',
 };
 

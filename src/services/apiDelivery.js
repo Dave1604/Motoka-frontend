@@ -80,3 +80,17 @@ export async function adminGetShipment(orderNumber) {
   const data = await res.json();
   return data.data;
 }
+
+export async function adminRolloverGuestOrder(orderId, scheduledFor) {
+  const token = localStorage.getItem("adminToken");
+  const res = await fetch(`${config.getApiBaseUrl()}/admin/guest-orders/${orderId}/rollover`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ scheduled_for: scheduledFor || null }),
+  });
+  const data = await res.json();
+  if (!res.ok || data.status === false) {
+    throw new Error(data.message || "Failed to roll over guest order");
+  }
+  return data.data;
+}

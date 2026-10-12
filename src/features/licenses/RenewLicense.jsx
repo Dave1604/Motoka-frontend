@@ -88,6 +88,48 @@ export default function RenewLicense() {
   const [showPartialPrompt, setShowPartialPrompt] = useState(false);
   const [pendingPaymentPayload, setPendingPaymentPayload] = useState(null);
   const [pendingSkippedDocs, setPendingSkippedDocs] = useState([]);
+  // Next-cycle chaining: every selected doc is covered by an in-flight order.
+  const [showNextCyclePrompt, setShowNextCyclePrompt] = useState(false);
+  const [nextCyclePayload, setNextCyclePayload] = useState(null);
+  const [nextCycleCovering, setNextCycleCovering] = useState([]);
+
+  const IN_FLIGHT_ORDER_STATUSES = ['pending', 'processing', 'scheduled'];
+  const inFlightPayments = (existingPayments || []).filter((p) =>
+    IN_FLIGHT_ORDER_STATUSES.includes(p.order_status)
+  );
+
+  const allSelectedCoveredByInFlight = () => {
+    if (selectedSchedules.length === 0) return false;
+    const heads = new Set(inFlightPayments.map((p) => p.payment_head_name));
+    return selectedSchedules.every((s) => heads.has(s.payment_head?.payment_head_name));
+  };
+
+  const coveringOrdersFor = (schedules) => {
+    const heads = new Set(
+      (schedules || []).map((s) => s.payment_head?.payment_head_name).filter(Boolean)
+    );
+    const seen = new Set();
+    return inFlightPayments.filter(
+      (p) => heads.has(p.payment_head_name) && p.order_number && !seen.has(p.order_number) && (seen.add(p.order_number), true)
+    );
+  };
+
+  const buildBasePayload = (schedules) => ({
+    car_slug: carDetail?.slug,
+    payment_schedule_id: schedules.map((schedule) => schedule.id),
+    renewal_state: renewalState || undefined,
+    ...(deliveryDetails.address.trim() !== "" ||
+        deliveryDetails.contact.trim() !== "" ||
+        deliveryDetails.state.trim() !== "" ||
+        deliveryDetails.lg.trim() !== "" ? {
+      delivery_details: {
+        ...(deliveryDetails.address.trim() !== "" && { address: deliveryDetails.address }),
+        ...(deliveryDetails.contact.trim() !== "" && { contact: deliveryDetails.contact }),
+        ...(deliveryDetails.state.trim() !== "" && { state: deliveryDetails.state }),
+        ...(deliveryDetails.lg.trim() !== "" && { lga: deliveryDetails.lg }),
+      },
+    } : {}),
+  });
 
   const isState = state?.data;
 
@@ -251,7 +293,7 @@ export default function RenewLicense() {
     // Basic validation: require selected schedules, available schedules, and renewal state
     const hasValidSchedules =
       selectedSchedules.length > 0 &&
-      getAvailableSchedules().length > 0; // Has available (unpaid) schedules
+      (getAvailableSchedules().length > 0 || allSelectedCoveredByInFlight()); // Has available (unpaid) schedules, or all covered by in-flight (next-cycle)
 
     if (!renewalState) return false;
 
@@ -377,6 +419,15 @@ export default function RenewLicense() {
     const availableSchedules = getAvailableSchedules();
 
     if (availableSchedules.length === 0) {
+      // Everything selected is already covered. When the coverage is an
+      // in-flight order (not a completed cycle), offer the next cycle
+      // instead of dead-ending — the backend chains the payment forward.
+      if (allSelectedCoveredByInFlight()) {
+        setNextCyclePayload({ ...buildBasePayload(selectedSchedules), confirm_duplicate: true });
+        setNextCycleCovering(coveringOrdersFor(selectedSchedules));
+        setShowNextCyclePrompt(true);
+        return;
+      }
       alert(
         "All selected document types have already been paid for. Please select different documents.",
       );
@@ -630,6 +681,14 @@ export default function RenewLicense() {
     selectedSchedules,
     deliveryDetails,
   ]);
+
+  // Race safety: coverage appeared between the duplicate check and init
+  // (409 needs_confirm). Refresh coverage so the next-cycle path opens.
+  React.useEffect(() => {
+    if (paymentInitError?.response?.data?.errors?.needs_confirm) {
+      checkForExistingPayments();
+    }
+  }, [paymentInitError]);
 
   return (
     <>
@@ -1033,7 +1092,11 @@ export default function RenewLicense() {
                   "Checking for existing payments..."
                 ) : existingPayments.length > 0 &&
                   getAvailableSchedules().length === 0 ? (
-                  "All documents already paid"
+                  allSelectedCoveredByInFlight() ? (
+                    "Pay for next cycle"
+                  ) : (
+                    "All documents already paid"
+                  )
                 ) : (
                   <>
                     ₦
@@ -1055,6 +1118,12 @@ export default function RenewLicense() {
                     Only unpaid documents will be processed
                   </p>
                 )}
+              {inFlightPayments.length > 0 && (
+                <p className="mt-2 text-center text-xs text-gray-600">
+                  Documents covered by an order in progress can be paid again
+                  for the following cycle — select them and continue.
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -1065,6 +1134,67 @@ export default function RenewLicense() {
         onSkip={handleSkipPartialPrompt}
         onConfirm={handleConfirmPartialPrompt}
       />
+      {showNextCyclePrompt && (
+        <div
+          className="fixed inset-0 z-[120] flex items-center justify-center bg-black/75 backdrop-blur-md p-4"
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowNextCyclePrompt(false);
+          }}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-xl font-semibold text-[#05243F]">Pay for the next cycle?</h3>
+            <p className="mt-1 text-sm text-[#697C8C]">
+              These documents are already covered by an order that is still in
+              progress. Paying now chains your payment to the following cycle —
+              processing starts when that cycle's renewal window opens.
+            </p>
+            {nextCycleCovering.length > 0 && (
+              <ul className="mt-4 space-y-2">
+                {nextCycleCovering.map((o) => (
+                  <li
+                    key={o.order_number}
+                    className="flex items-center justify-between rounded-xl border border-[#E5E7EB] px-4 py-2.5 text-sm"
+                  >
+                    <span className="font-semibold text-[#05243F]">{o.order_number}</span>
+                    <span className="text-xs text-[#697C8C]">
+                      {o.order_status === 'scheduled'
+                        ? `Scheduled${o.scheduled_for ? ` · starts ${o.scheduled_for}` : ''}`
+                        : o.order_status === 'processing'
+                          ? 'In progress'
+                          : 'New'}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="mt-5 flex gap-3">
+              <button
+                type="button"
+                onClick={() => setShowNextCyclePrompt(false)}
+                className="h-11 flex-1 rounded-full border border-[#E1E6F4] text-sm font-semibold text-[#05243F] hover:bg-[#F2F5FB]"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowNextCyclePrompt(false);
+                  if (nextCyclePayload?.payment_schedule_id?.length > 0) {
+                    startPayment(nextCyclePayload);
+                  }
+                }}
+                className="h-11 flex-1 rounded-full bg-[#2389E3] text-sm font-semibold text-white hover:bg-[#2389E3]/90"
+              >
+                Pay for next cycle
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

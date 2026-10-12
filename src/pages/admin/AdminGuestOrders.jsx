@@ -175,6 +175,14 @@ export default function AdminGuestOrders() {
                       <StatusBadge tone={STATUS_TONE[order.payment_status] || 'gray'}>
                         {STATUS_LABEL[order.payment_status] || order.payment_status}
                       </StatusBadge>
+                      {order.payment_status === 'payment_success' && order.scheduled_for && (
+                        <div className="mt-1 text-xs text-gray-500">starts {order.scheduled_for}</div>
+                      )}
+                      {order.payment_status === 'payment_success' && !order.linked_user_id && (
+                        <div className="mt-1">
+                          <StatusBadge tone="amber">Awaiting registration</StatusBadge>
+                        </div>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-500">
                       {order.created_at ? new Date(order.created_at).toLocaleDateString('en-GB') : '—'}

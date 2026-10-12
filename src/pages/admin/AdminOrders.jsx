@@ -27,18 +27,21 @@ import {
 const STATUS_FILTERS = [
   { value: 'all',        label: 'All' },
   { value: 'pending',    label: 'New' },
+  { value: 'scheduled',  label: 'Scheduled' },
   { value: 'processing', label: 'In Progress' },
   { value: 'completed',  label: 'Completed' },
   { value: 'cancelled',  label: 'Cancelled' },
 ];
 const STATUS_LABEL = {
   pending:    'New',
+  scheduled:  'Scheduled',
   processing: 'In Progress',
   completed:  'Completed',
   cancelled:  'Cancelled',
 };
 const STATUS_TONE = {
   pending:    'blue',
+  scheduled:  'violet',
   processing: 'amber',
   completed:  'green',
   cancelled:  'gray',
@@ -139,6 +142,7 @@ const AdminOrders = () => {
     location: order.state_name ? `${order.state_name}${order.lga_name ? ', ' + order.lga_name : ''}` : (order.order_type === 'plate_number' || order.order_type === 'driver_license' ? '—' : 'Unknown'),
     renewalState: order.renewal_state || null,
     status: order.status,
+    scheduledFor: order.scheduled_for || null,
     date: order.created_at ? new Date(order.created_at).toLocaleDateString('en-GB') : '—',
     originalOrder: order
   }));
@@ -323,6 +327,9 @@ const AdminOrders = () => {
                       <StatusBadge tone={STATUS_TONE[order.status] || 'gray'}>
                         {STATUS_LABEL[order.status] || order.status}
                       </StatusBadge>
+                      {order.status === 'scheduled' && order.scheduledFor && (
+                        <div className="mt-1 text-xs text-gray-500">starts {order.scheduledFor}</div>
+                      )}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
                       {order.date}

@@ -192,9 +192,14 @@ const AdminDashboard = () => {
           label="Total Orders"
           value={stats ? Number(stats.total_orders).toLocaleString() : '0'}
           hint={
-            Number(stats?.guest_paid_orders) > 0
-              ? `incl. ${Number(stats.guest_paid_orders).toLocaleString()} guest`
-              : null
+            [
+              Number(stats?.guest_paid_orders) > 0
+                ? `incl. ${Number(stats.guest_paid_orders).toLocaleString()} guest`
+                : null,
+              Number(stats?.scheduled_orders) > 0
+                ? `${Number(stats.scheduled_orders).toLocaleString()} scheduled`
+                : null,
+            ].filter(Boolean).join(' · ') || null
           }
           loading={!statsReady}
         />

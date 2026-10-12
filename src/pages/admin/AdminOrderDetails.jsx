@@ -48,6 +48,9 @@ const AdminOrderDetails = () => {
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(null);
   const [statusUpdating, setStatusUpdating] = useState(false);
+  const [showRollover, setShowRollover] = useState(false);
+  const [rolloverDate, setRolloverDate] = useState('');
+  const [rolloverBusy, setRolloverBusy] = useState(false);
 
   // Document upload state
   const [documents, setDocuments] = useState([]);
@@ -194,6 +197,52 @@ const AdminOrderDetails = () => {
     }
   };
 
+  const defaultRolloverDate = () => {
+    try {
+      const base = new Date(order?.previous_expiry_date || order?.car?.expiry_date || Date.now());
+      base.setMonth(base.getMonth() + (Number(order?.renewal_months) || 12));
+      return base.toISOString().slice(0, 10);
+    } catch {
+      return '';
+    }
+  };
+
+  const handleRollover = async () => {
+    const newExpiry = rolloverDate || defaultRolloverDate();
+    if (!newExpiry) {
+      toast.error('Pick the new expiry date first');
+      return;
+    }
+    try {
+      setRolloverBusy(true);
+      const token = localStorage.getItem('adminToken');
+      const response = await fetch(`${config.getApiBaseUrl()}/admin/orders/${order?.order_number}/rollover`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ new_expiry_date: newExpiry }),
+      });
+      const data = await response.json();
+      if (data.status) {
+        await fetchOrderDetails();
+        setShowRollover(false);
+        toast.success(
+          data.data?.status === 'scheduled'
+            ? `Rolled to next cycle — held to ${data.data?.scheduled_for}`
+            : 'Rolled to next cycle — actionable now'
+        );
+      } else {
+        toast.error(data.message || 'Failed to roll over order');
+      }
+    } catch {
+      toast.error('Failed to roll over order');
+    } finally {
+      setRolloverBusy(false);
+    }
+  };
+
   const printOrderPDF = () => {
     const fmt = (v) => v || 'N/A';
     const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : 'N/A';
@@ -290,6 +339,7 @@ const AdminOrderDetails = () => {
 
     const statusConfig = {
       pending:    { tone: 'amber', icon: ClockIcon,       label: 'NEW' },
+      scheduled:  { tone: 'violet', icon: ClockIcon,      label: 'SCHEDULED' },
       processing: { tone: 'blue',  icon: ClockIcon,       label: 'IN PROGRESS' },
       completed:  { tone: 'green', icon: CheckCircleIcon, label: 'COMPLETED' },
       cancelled:  { tone: 'red',   icon: XCircleIcon,     label: 'CANCELLED' },
@@ -735,6 +785,71 @@ const AdminOrderDetails = () => {
                   >
                     {statusUpdating ? 'Reopening…' : 'Reopen Order'}
                   </button>
+                </>
+              )}
+
+              {/* Scheduled hold — release early, or roll to a later cycle */}
+              {order?.status === 'scheduled' && (
+                <>
+                  <p className="text-sm text-gray-500">
+                    Held until {order?.scheduled_for || 'the window opens'}. Release it
+                    now, or roll it to a later cycle below.
+                  </p>
+                  <button
+                    onClick={() => handleStatusUpdate('pending')}
+                    disabled={statusUpdating}
+                    className={`${BTN_PRIMARY} w-full`}
+                  >
+                    {statusUpdating ? 'Releasing…' : 'Release Now'}
+                  </button>
+                </>
+              )}
+
+              {/* Rollover — customer paid for a cycle fulfilled elsewhere; move
+                  the payment to the year to come. Updates the car expiry and
+                  re-holds (or releases) the order from the new date. */}
+              {['pending', 'processing', 'scheduled'].includes(order?.status) && (
+                <>
+                  {!showRollover ? (
+                    <button
+                      onClick={() => {
+                        setRolloverDate(defaultRolloverDate());
+                        setShowRollover(true);
+                      }}
+                      disabled={statusUpdating}
+                      className="w-full border border-gray-300 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-50 disabled:opacity-50 font-medium text-sm"
+                    >
+                      Roll to Next Cycle…
+                    </button>
+                  ) : (
+                    <div className="rounded-lg border border-gray-200 p-3 space-y-2">
+                      <label className="text-xs font-medium text-gray-600">
+                        New expiry date (validity the customer already holds)
+                      </label>
+                      <input
+                        type="date"
+                        value={rolloverDate}
+                        onChange={(e) => setRolloverDate(e.target.value)}
+                        className={`${INPUT} bg-white`}
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setShowRollover(false)}
+                          disabled={rolloverBusy}
+                          className="flex-1 border border-gray-300 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-50 disabled:opacity-50 font-medium text-sm"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={handleRollover}
+                          disabled={rolloverBusy}
+                          className={`${BTN_PRIMARY} flex-1`}
+                        >
+                          {rolloverBusy ? 'Rolling…' : 'Confirm Rollover'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </>
               )}
             </div>
