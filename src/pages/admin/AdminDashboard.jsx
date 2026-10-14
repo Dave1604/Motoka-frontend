@@ -67,8 +67,42 @@ const AdminDashboard = () => {
       statsPromise,
       fetch(`${config.getApiBaseUrl()}/admin/recent-orders`, { headers }).then(safeJson).catch(() => null),
       fetch(`${config.getApiBaseUrl()}/admin/recent-transactions`, { headers }).then(safeJson).catch(() => null),
-      fetch(`${config.getApiBaseUrl()}/admin/orders?page=1&per_page=200`, { headers }).then(safeJson).catch(() => null),
-      fetch(`${config.getApiBaseUrl()}/admin/guest-orders?page=1&limit=100&status=payment_success`, { headers }).then(safeJson).catch(() => null),
+      // The chart must see every order, not just the first page — loop to
+      // the last page (capped at 50 ≈ 10k orders as a runaway guard).
+      (async () => {
+        const all = [];
+        let page = 1;
+        for (;;) {
+          const res = await fetch(
+            `${config.getApiBaseUrl()}/admin/orders?page=${page}&per_page=200`,
+            { headers }
+          ).then(safeJson).catch(() => null);
+          if (!res?.status) return all.length > 0 ? { status: true, data: { data: all } } : null;
+          const rows = res.data?.data || res.data || [];
+          if (Array.isArray(rows)) all.push(...rows);
+          const lastPage = res.data?.last_page || 1;
+          page += 1;
+          if (page > lastPage || page > 50) break;
+        }
+        return { status: true, data: { data: all } };
+      })(),
+      (async () => {
+        const all = [];
+        let page = 1;
+        for (;;) {
+          const res = await fetch(
+            `${config.getApiBaseUrl()}/admin/guest-orders?page=${page}&limit=100&status=payment_success`,
+            { headers }
+          ).then(safeJson).catch(() => null);
+          if (!res?.status) return all.length > 0 ? { status: true, data: { orders: all } } : null;
+          const rows = res.data?.orders || [];
+          if (Array.isArray(rows)) all.push(...rows);
+          const lastPage = res.data?.pagination?.total_pages || 1;
+          page += 1;
+          if (page > lastPage || page > 50) break;
+        }
+        return { status: true, data: { orders: all } };
+      })(),
     ]);
 
     if (ordersResult?.status) setRecentOrders(ordersResult.data);
