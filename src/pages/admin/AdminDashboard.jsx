@@ -17,6 +17,7 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
+  Legend,
   ResponsiveContainer,
 } from 'recharts';
 import config from '../../config/config';
@@ -303,6 +304,7 @@ const AdminDashboard = () => {
                   tick={{ fontSize: 11, fill: '#6b7280' }}
                   axisLine={false}
                   tickLine={false}
+                  allowDecimals={false}
                 />
                 <Tooltip
                   formatter={(value, name) =>
@@ -310,8 +312,9 @@ const AdminDashboard = () => {
                   }
                   contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 12 }}
                 />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
                 <Bar yAxisId="amount" dataKey="amount" name="Revenue" fill="#2389E3" radius={[4, 4, 0, 0]} />
-                <Bar yAxisId="orders" dataKey="orders" name="Orders" fill="#2389E3" radius={[4, 4, 0, 0]} />
+                <Bar yAxisId="orders" dataKey="orders" name="Orders" fill="#F59E0B" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           ) : (
