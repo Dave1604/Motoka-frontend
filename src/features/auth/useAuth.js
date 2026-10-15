@@ -77,8 +77,11 @@ export function useLogin() {
         navigate("/dashboard");
       }
     },
-    onError: (err) => {
+    onError: (err, variables) => {
       if (err.response?.data?.message === "Please verify your email before logging in.") {
+        // The verify page reads the pending email from storage; without it
+        // it bounces to signup.
+        if (variables?.email) localStorage.setItem("pendingVerificationEmail", variables.email);
         toast.error(err.response.data.message);
         navigate("/auth/verify-account");
       } else {
